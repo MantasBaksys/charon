@@ -1009,10 +1009,24 @@ and path_elem_with_generic_args_to_pattern (ctx : ctx) (c : to_pat_config)
       | None -> [ PIdent (tgt, 0, []) ]
       | Some args -> [ PIdent (tgt, 0, args) ]
     end
-  | PeInstantiated _ ->
-      (* In pattern generation, we skip monomorphized elements since patterns
-         are meant to match the logical structure, not the instantiation details *)
-      []
+  | PeInstantiated binder -> (
+      match c.tgt with
+      | TkName ->
+          (* For name *generation* (extraction names) we must NOT drop the
+             instantiation: several monomorphized copies of the same item
+             (e.g. the specialized `core::ops::function::FnMut::<...>` copies
+             produced by Charon's `--monomorphize-mut`) share the same logical
+             name and would collide otherwise. We encode the instantiation
+             arguments as the generics of a synthetic identifier so that
+             copies with different instantiations get distinct names. *)
+          let m = compute_constraints_map binder.binder_params in
+          let generics = generic_args_to_pattern ctx c m binder.binder_value in
+          [ PIdent ("Inst", 0, generics) ]
+      | TkPattern | TkPretty ->
+          (* In pattern generation, we skip monomorphized elements since
+             patterns are meant to match the logical structure, not the
+             instantiation details *)
+          [])
 
 and impl_elem_to_pattern (ctx : ctx) (c : to_pat_config) (impl : T.impl_elem) :
     pattern_elem =
